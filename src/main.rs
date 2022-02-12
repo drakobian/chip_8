@@ -14,7 +14,7 @@ fn main() {
     memory[0x102] = 0x80; memory[0x103] = 0x14;
     memory[0x104] = 0x00; memory[0x105] = 0xEE;
 
-    let mut cpu = CPU::new(registers, memory);
+    let mut cpu = CPU::new(Some(registers), Some(memory));
 
     cpu.run();
 

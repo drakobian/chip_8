@@ -1,10 +1,48 @@
+//! CHIP-8 Emulator
+//! 
+//! Given a set of values in registers and a program in memory,
+//! the CPU struct provides a `run` function to
+//! emulate a CHIP-8 processor.
+//! 
+//! Reads memory two bytes at a time to form one operation.
+//! 
+//! # Example 
+//! 
+//! ```
+//! use chip_8::CPU;
+//! 
+//! let mut registers = [0; 16];
+//! registers[0] = 5;
+//! registers[1] = 10;
+//! 
+//! let mut memory = [0; 0x1000];
+//! // Call the function at memory location `100` (opcode 0x2100)
+//! memory[0x000] = 0x21; memory[0x001] = 0x00;
+//! // Terminate
+//! memory[0x002] = 0x00; memory[0x003] = 0x00;
+//! 
+//! // Add the value in register `1` to register `0` (opcode 0x8014)
+//! memory[0x100] = 0x80; memory[0x101] = 0x14;
+//! // Return to previous memory location
+//! memory[0x102] = 0x00; memory[0x103] = 0xEE;
+//! 
+//! // the program in memory above adds the value of register 1
+//! // to the value in register 0
+//! let mut cpu = CPU::new(Some(registers), Some(memory));
+//! 
+//! cpu.run();
+//! 
+//! assert_eq!(15, cpu.registers(0));
+//! ```
+
 type Address = u16;
 type Byte = u8;
-type Memory = [Byte; 0x1000];
+type Memory = [Byte; 4096];
 type OpCode = u16;
 type Registers = [Byte; 16];
 type Stack = [u16; 16];
 
+/// Implements a CHIP-8 based CPU
 pub struct CPU {
     program_counter: usize,
     registers: Registers,
@@ -13,18 +51,33 @@ pub struct CPU {
     stack_pointer: usize,
 }
 
-
 impl CPU {
-    pub fn new(registers: Registers, memory: Memory) -> Self {
+    // TODO: Set defaults for things, or maybe use builder pattern
+    /// Generates a new CPU with defaults
+    /// 
+    /// Allows for registers and memory to be set optionally
+    /// # Examples
+    /// ```
+    /// use chip_8::CPU;
+    /// 
+    /// let default_cpu = CPU::new(None, None);
+    /// 
+    /// let mut registers = [0; 16]; registers[5] = 12;
+    /// let mut memory = [0; 4096]; memory[100] = 0x80;
+    /// let specified_cpu = CPU::new(Some(registers), Some(memory));
+    /// ```
+    pub fn new(registers: Option<Registers>, memory: Option<Memory>) -> Self {
         CPU {
             program_counter: 0,
-            registers,
-            memory,
+            registers: registers.unwrap_or([0; 16]),
+            memory: memory.unwrap_or([0; 0x1000]),
             stack: [0; 16],
             stack_pointer: 0,
         }
     }
 
+    // TODO: add some simple doc examples for doctests
+    /// Runs the program set in memory according to the CHIP-8 spec
     pub fn run(&mut self) {
         loop {
             let opcode = self.read_opcode();
@@ -46,6 +99,7 @@ impl CPU {
         }
     }
 
+    /// Returns the next two bytes of memory concatenated as a u16
     fn read_opcode(&self) -> OpCode {
         let p = self.program_counter;
         let byte1 = self.memory[p] as OpCode;
@@ -53,8 +107,14 @@ impl CPU {
         byte1 << 8 | byte2
     }
 
+    /// Moves the program_counter to the given address, maintaining
+    /// the old program_counter in the stack.
+    /// 
+    /// # Panics
+    /// 
+    /// Panics if the stack is full
     fn call(&mut self, addr: Address) {
-        if self.stack_pointer > self.stack.len() {
+        if self.stack_pointer >= self.stack.len() {
             panic!("Stack overflow")
         }
 
@@ -63,8 +123,14 @@ impl CPU {
         self.program_counter = addr as usize;
     }
 
+    /// Moves the program_counter to the previous memory location
+    /// on the stack.
+    /// 
+    /// # Panics
+    /// 
+    /// Panics if the stack is empty
     fn ret(&mut self) {
-        if self.stack.len() == 0 {
+        if self.stack_pointer == 0 {
             panic!("Stack underflow")
         }
 
@@ -73,6 +139,11 @@ impl CPU {
         self.program_counter = mem as usize;
     }
 
+    /// Increments the value in register `x` by the value in register `y`
+    /// 
+    /// If this operation overflows the register size, the overflow register
+    /// 
+    /// `0xF` is set to `1`
     fn add_xy(&mut self, x: Byte, y: Byte) {
         let arg1 = self.registers[x as usize];
         let arg2 = self.registers[y as usize];
@@ -86,7 +157,15 @@ impl CPU {
         }
     }
 
-    // Getters
+    /// A convenience method for retrieving the value of a specific register
+    /// # Examples
+    /// ```
+    /// use chip_8::CPU;
+    /// 
+    /// let mut registers = [0; 16]; registers[5] = 12;
+    /// let cpu = CPU::new(Some(registers), None);
+    /// assert_eq!(cpu.registers(5), 12);
+    /// ```
     pub fn registers(&self, ind: usize) -> Byte {
         self.registers[ind]
     }
@@ -98,11 +177,9 @@ mod tests {
 
     #[test]
     fn new_creates_cpu() {
-        let memory = [0; 0x1000];
-        let registers = [0; 16];
-        let cpu = CPU::new(registers, memory);
-        assert_eq!(cpu.registers, registers);
-        assert_eq!(cpu.memory, memory);
+        let cpu = CPU::new(None, None);
+        assert_eq!(cpu.registers, [0; 16]);
+        assert_eq!(cpu.memory, [0; 0x1000]);
         assert_eq!(cpu.program_counter, 0);
         assert_eq!(cpu.stack_pointer, 0);
         assert_eq!(cpu.stack, [0; 16]);
@@ -110,12 +187,102 @@ mod tests {
 
     #[test]
     fn registers_gets_register_at_index() {
-        let memory = [0; 0x1000];
         let mut registers = [0; 16];
         registers[3] = 3;
-        let cpu = CPU::new(registers, memory);
+        let cpu = CPU::new(Some(registers), None);
         for i in 0..16 {
             assert_eq!(cpu.registers(i), if i == 3 { 3 } else { 0 });
         }
+    }
+
+    #[test]
+    fn add_xy_adds_registers_no_overflow() {
+        let mut registers = [0; 16];
+        registers[0] = 3;
+        registers[1] = 5;
+        let mut cpu = CPU::new(Some(registers), None);
+        cpu.add_xy(0, 1);
+
+        assert_eq!(8, cpu.registers(0));
+        assert_eq!(5, cpu.registers(1));
+        assert_eq!(0, cpu.registers(15));
+    }
+
+    #[test]
+    fn add_xy_adds_registers_overflow() {
+        let mut registers = [0; 16];
+        registers[0] = 255;
+        registers[1] = 1;
+        let mut cpu = CPU::new(Some(registers), None);
+        cpu.add_xy(0, 1);
+
+        assert_eq!(0, cpu.registers(0));
+        assert_eq!(1, cpu.registers(15));
+    }
+
+    #[test]
+    fn read_opcode_concats_next_two_bytes() {
+        let byte1 = 0x81;
+        let byte2 = 0x56;
+        let start = 0x123;
+        let mut memory = [0; 0x1000];
+        memory[start] = byte1;
+        memory[start + 1] = byte2;
+        let mut cpu = CPU::new(None, Some(memory));
+        cpu.program_counter = start;
+
+        let expected = ((memory[start] as u16) << 8 | (memory[start + 1] as u16)) as u16;
+        assert_eq!(expected, cpu.read_opcode());
+    }
+
+    #[test]
+    #[should_panic(expected = "Stack overflow")]
+    fn call_can_overflow_stack() {
+        let mut cpu = CPU::new(None, None);
+        cpu.stack_pointer = 16;
+
+        cpu.call(0x100);
+        assert_eq!(false, true, "Expected the stack to overflow")
+    }
+
+    #[test]
+    fn call_sets_stack_and_pointers() {
+        let start = 5;
+        let pc = 0x100;
+        let addr = 200;
+
+        let mut cpu = CPU::new(None, None);
+        cpu.stack_pointer = start;
+        cpu.program_counter = pc;
+
+        cpu.call(addr);
+
+        assert_eq!(cpu.stack[start], pc as u16);
+        assert_eq!(cpu.stack_pointer, start + 1);
+        assert_eq!(cpu.program_counter, addr as usize);
+    }
+
+    #[test]
+    #[should_panic(expected = "Stack underflow")]
+    fn ret_can_underflow_stack() {
+        let mut cpu = CPU::new(None, None);
+
+        cpu.ret();
+        assert_eq!(false, true, "Expected the stack to underflow")
+    }
+
+    #[test]
+    fn ret_sets_pointers() {
+        let start = 5;
+        let pc = 0x100;
+
+        let mut cpu = CPU::new(None, None);
+        cpu.stack_pointer = start;
+        cpu.stack[start - 1] = pc;
+
+        cpu.ret();
+
+        assert_eq!(cpu.stack_pointer, start - 1);
+        assert_eq!(cpu.program_counter, pc as usize);
     }
 }
