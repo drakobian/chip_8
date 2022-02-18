@@ -1,8 +1,8 @@
 1. setup new cargo project - check!
 2. get project running w/ what's in sandbox - check!
 3. reorganize into lib - check!
-3. write unit tests for what I have now - started!
-4. Write docs for what I have now
+3. write unit tests for what I have now - check!
+4. Write docs for what I have now - check!
 4. implement all the "standalone" op codes - the ones that don't touch display, keypress, sound, etc :)
 	Write unit test(s) first!
 	No, write docs first!!!
