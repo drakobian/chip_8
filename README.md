@@ -12,3 +12,6 @@
 6. timers
 7. input
 8. sound
+9. make a good readme
+10. publish to crates.io
+11. profit??

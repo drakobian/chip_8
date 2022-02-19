@@ -79,11 +79,13 @@ impl CPUBuilder {
         }
     }
 
+    /// Set registers on the builder
     pub fn registers(&mut self, registers: Registers) -> &mut CPUBuilder {
         self.registers = Some(registers);
         self
     }
 
+    /// Set memory on the builder
     pub fn memory(&mut self, memory: Memory) -> &mut CPUBuilder {
         self.memory = Some(memory);
         self
@@ -132,11 +134,21 @@ impl CPU {
             let y = ((opcode & 0x00F0) >> 04) as Byte;
             let d = ((opcode & 0x000F) >> 00) as Byte;
             let nnn = opcode & 0x0FFF;
+            let nn = opcode & 0x00FF;
 
             match (c, x, y, d) {
                 (0, 0, 0, 0) => break,
+                (0x1, _, _, _) => self.jump(nnn),
                 (0x2, _, _, _) => self.call(nnn),
+                (0x3, _, _, _) => self.skip_equal(x, nn),
+                (0x4, _, _, _) => self.skip_not_equal(x, nn),
+                (0x5, _, _, _) => self.skip_equal_reg(x, y),
+                (0x6, _, _, _) => self.set_register(x, nn),
+                (0x7, _, _, _) => self.add(x, nn),
+                (0x9, _, _, 0) => self.skip_not_equal_reg(x, y),
                 (0, 0, 0xE, 0xE) => self.ret(),
+                (0x8, _, _, 0) => self.assign(x, y),
+                (0x8, _, _, 0x1) => self.or(x, y),
                 (0x8, _, _, 0x4) => self.add_xy(x, y),
                 _ => todo!("opcode {:04x}", opcode),
             }
@@ -149,6 +161,11 @@ impl CPU {
         let byte1 = self.memory[p] as OpCode;
         let byte2 = self.memory[p + 1] as OpCode;
         byte1 << 8 | byte2
+    }
+
+    /// Moves the program_counter to the given address
+    fn jump(&mut self, addr: Address) {
+        self.program_counter = addr as usize;
     }
 
     /// Moves the program_counter to the given address, maintaining
@@ -199,6 +216,55 @@ impl CPU {
         } else {
             self.registers[0xF] = 0;
         }
+    }
+
+    /// Skips the next instruction if registers[x] equals NN
+    fn skip_equal(&mut self, x: Byte, nn: u16) {
+        if self.registers[x as usize] == nn as Byte {
+            self.program_counter += 2;
+        }
+    }
+
+    /// Skips the next instruction if registers[x] does not equal NN
+    fn skip_not_equal(&mut self, x: Byte, nn: u16) {
+        if self.registers[x as usize] != nn as Byte {
+            self.program_counter += 2;
+        }
+    }
+
+    /// Skips the next instruction if registers[x] equals registers[y]
+    fn skip_equal_reg(&mut self, x: Byte, y: Byte) {
+        if self.registers[x as usize] == self.registers[y as usize] {
+            self.program_counter += 2;
+        }
+    }
+
+    /// Skips the next instruction if registers[x] does not equal registers[y]
+    fn skip_not_equal_reg(&mut self, x: Byte, y: Byte) {
+        if self.registers[x as usize] != self.registers[y as usize] {
+            self.program_counter += 2;
+        }
+    }
+
+    /// Sets registers[x] to nn
+    fn set_register(&mut self, x: Byte, nn: u16) {
+        self.registers[x as usize] = nn as Byte;
+    }
+
+    /// Adds nn to register[x]
+    fn add(&mut self, x: Byte, nn: u16) {
+        // TODO: handle overflow?
+        self.registers[x as usize] += nn as u8;
+    }
+
+    /// Sets register[x] to the value in register[y]
+    fn assign(&mut self, x: Byte, y: Byte) {
+        self.registers[x as usize] = self.registers[y as usize];
+    }
+
+    /// Sets register[x] to register[x] bitwise OR register[y]
+    fn or(&mut self, x: Byte, y: Byte) {
+        self.registers[x as usize] |= self.registers[y as usize];
     }
 
     /// A convenience method for retrieving the value of a specific register
@@ -298,6 +364,138 @@ mod tests {
 
         let expected = ((memory[start] as u16) << 8 | (memory[start + 1] as u16)) as u16;
         assert_eq!(expected, cpu.read_opcode());
+    }
+
+    #[test]
+    fn jump_sets_program_counter() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.program_counter = 0x100;
+        cpu.jump(0x200);
+
+        assert_eq!(cpu.program_counter, 0x200);
+    }
+
+    #[test]
+    fn skip_equal_sets_program_counter_when_equal() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.program_counter = 0x100;
+        cpu.registers[2] = 8;
+        cpu.skip_equal(2, 8);
+
+        assert_eq!(cpu.program_counter, 0x102);
+    }
+
+    #[test]
+    fn skip_equal_continues_when_not_equal() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.program_counter = 0x100;
+        cpu.registers[2] = 7;
+        cpu.skip_equal(2, 8);
+
+        assert_eq!(cpu.program_counter, 0x100);
+    }
+
+    #[test]
+    fn skip_not_equal_continues_when_equal() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.program_counter = 0x100;
+        cpu.registers[2] = 8;
+        cpu.skip_not_equal(2, 8);
+
+        assert_eq!(cpu.program_counter, 0x100);
+    }
+
+    #[test]
+    fn skip_not_equal_sets_program_counter_when_not_equal() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.program_counter = 0x100;
+        cpu.registers[2] = 7;
+        cpu.skip_not_equal(2, 8);
+
+        assert_eq!(cpu.program_counter, 0x102);
+    }
+
+    #[test]
+    fn skip_equal_reg_sets_program_counter_when_equal() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.program_counter = 0x100;
+        cpu.registers[2] = 8;
+        cpu.registers[7] = 8;
+        cpu.skip_equal_reg(2, 7);
+
+        assert_eq!(cpu.program_counter, 0x102);
+    }
+
+    #[test]
+    fn skip_equal_reg_continues_when_not_equal() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.program_counter = 0x100;
+        cpu.registers[2] = 7;
+        cpu.registers[7] = 2;
+        cpu.skip_equal_reg(2, 7);
+
+        assert_eq!(cpu.program_counter, 0x100);
+    }
+
+    #[test]
+    fn skip_not_equal_reg_continues_when_equal() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.program_counter = 0x100;
+        cpu.registers[2] = 8;
+        cpu.registers[7] = 8;
+        cpu.skip_not_equal_reg(2, 7);
+
+        assert_eq!(cpu.program_counter, 0x100);
+    }
+
+    #[test]
+    fn skip_not_equal_reg_sets_program_counter_when_not_equal() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.program_counter = 0x100;
+        cpu.registers[2] = 7;
+        cpu.registers[7] = 2;
+        cpu.skip_not_equal_reg(2, 7);
+
+        assert_eq!(cpu.program_counter, 0x102);
+    }
+
+    #[test]
+    fn set_register_sets_register() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.set_register(2, 7);
+
+        assert_eq!(cpu.registers[2], 7);
+    }
+
+    #[test]
+    fn add_increments_register() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.add(3, 5);
+        cpu.add(3, 1);
+
+        assert_eq!(cpu.registers[3], 6);
+    }
+
+    #[test]
+    fn assign_sets_register_from_other_register() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.registers[1] = 6;
+        cpu.registers[10] = 4;
+        cpu.assign(1, 10);
+
+        assert_eq!(cpu.registers[1], 4);
+        assert_eq!(cpu.registers[10], 4);
+    }
+
+    #[test]
+    fn or_sets_register_from_other_register() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.registers[2] = 0x001;
+        cpu.registers[5] = 0x010;
+        cpu.or(2, 5);
+
+        assert_eq!(cpu.registers[2], 0x011);
+        assert_eq!(cpu.registers[5], 0x010);
     }
 
     #[test]
