@@ -138,6 +138,7 @@ impl CPU {
 
             match (c, x, y, d) {
                 (0, 0, 0, 0) => break,
+                (0, 0, 0xE, 0xE) => self.ret(),
                 (0x1, _, _, _) => self.jump(nnn),
                 (0x2, _, _, _) => self.call(nnn),
                 (0x3, _, _, _) => self.skip_equal(x, nn),
@@ -145,11 +146,16 @@ impl CPU {
                 (0x5, _, _, _) => self.skip_equal_reg(x, y),
                 (0x6, _, _, _) => self.set_register(x, nn),
                 (0x7, _, _, _) => self.add(x, nn),
-                (0x9, _, _, 0) => self.skip_not_equal_reg(x, y),
-                (0, 0, 0xE, 0xE) => self.ret(),
                 (0x8, _, _, 0) => self.assign(x, y),
                 (0x8, _, _, 0x1) => self.or(x, y),
+                (0x8, _, _, 0x2) => self.and(x, y),
+                (0x8, _, _, 0x3) => self.xor(x, y),
                 (0x8, _, _, 0x4) => self.add_xy(x, y),
+                (0x8, _, _, 0x5) => self.sub_xy(x, y),
+                (0x8, _, _, 0x6) => self.shift_right(x),
+                (0x8, _, _, 0x7) => self.sub_n(x, y),
+                (0x8, _, _, 0xE) => self.shift_left(x),
+                (0x9, _, _, 0) => self.skip_not_equal_reg(x, y),
                 _ => todo!("opcode {:04x}", opcode),
             }
         }
@@ -202,7 +208,7 @@ impl CPU {
 
     /// Increments the value in register `x` by the value in register `y`
     ///
-    /// If this operation overflows the register size, the overflow register
+    /// If this operation overflows the register size, the borrow register
     ///
     /// `0xF` is set to `1`
     fn add_xy(&mut self, x: Byte, y: Byte) {
@@ -215,6 +221,42 @@ impl CPU {
             self.registers[0xF] = 1;
         } else {
             self.registers[0xF] = 0;
+        }
+    }
+
+    /// Decrements the value in register `x` by the value in register `y`
+    ///
+    /// If this operation _does not_ underflow the register, the 'borrow' register
+    ///
+    /// `0xF` is set to `1`
+    fn sub_xy(&mut self, x: Byte, y: Byte) {
+        let arg1 = self.registers[x as usize];
+        let arg2 = self.registers[y as usize];
+        let (val, overflow) = arg1.overflowing_sub(arg2);
+        self.registers[x as usize] = val;
+
+        if overflow {
+            self.registers[0xF] = 0;
+        } else {
+            self.registers[0xF] = 1;
+        }
+    }
+
+    /// Sets register[x] = register[y] - register[x]
+    ///
+    /// If this operation _does not_ underflow the register, the 'borrow' register
+    ///
+    /// `0xF` is set to `1`
+    fn sub_n(&mut self, x: Byte, y: Byte) {
+        let arg1 = self.registers[x as usize];
+        let arg2 = self.registers[y as usize];
+        let (val, overflow) = arg2.overflowing_sub(arg1);
+        self.registers[x as usize] = val;
+
+        if overflow {
+            self.registers[0xF] = 0;
+        } else {
+            self.registers[0xF] = 1;
         }
     }
 
@@ -265,6 +307,34 @@ impl CPU {
     /// Sets register[x] to register[x] bitwise OR register[y]
     fn or(&mut self, x: Byte, y: Byte) {
         self.registers[x as usize] |= self.registers[y as usize];
+    }
+
+    /// Sets register[x] to register[x] bitwise AND register[y]
+    fn and(&mut self, x: Byte, y: Byte) {
+        self.registers[x as usize] &= self.registers[y as usize];
+    }
+
+    /// Sets register[x] to register[x] bitwise XOR register[y]
+    fn xor(&mut self, x: Byte, y: Byte) {
+        self.registers[x as usize] ^= self.registers[y as usize];
+    }
+
+    /// Stores the least signifcant bit of register[x] in the borrow register
+    /// 
+    /// and then shifts register[x] right 1
+    fn shift_right(&mut self, x: Byte) {
+        let least_sig = self.registers[x as usize] & 0b00000001;
+        self.registers[0xF] = least_sig;
+        self.registers[x as usize] >>= 1;
+    }
+
+    /// Stores the most signifcant bit of register[x] in the borrow register
+    /// 
+    /// and then shifts register[x] right 1
+    fn shift_left(&mut self, x: Byte) {
+        let most_sig = self.registers[x as usize] & 0b10000000;
+        self.registers[0xF] = most_sig >> 7;
+        self.registers[x as usize] <<= 1;
     }
 
     /// A convenience method for retrieving the value of a specific register
@@ -496,6 +566,100 @@ mod tests {
 
         assert_eq!(cpu.registers[2], 0x011);
         assert_eq!(cpu.registers[5], 0x010);
+    }
+
+    #[test]
+    fn and_sets_register_from_other_register() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.registers[2] = 0x011;
+        cpu.registers[5] = 0x010;
+        cpu.and(2, 5);
+
+        assert_eq!(cpu.registers[2], 0x010);
+        assert_eq!(cpu.registers[5], 0x010);
+    }
+
+    #[test]
+    fn xor_sets_register_from_other_register() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.registers[2] = 0x011;
+        cpu.registers[5] = 0x010;
+        cpu.xor(2, 5);
+
+        assert_eq!(cpu.registers[2], 0x001);
+        assert_eq!(cpu.registers[5], 0x010);
+    }
+
+    #[test]
+    fn sub_xy_subtracts_registers_no_underflow() {
+        let mut registers = [0; 16];
+        registers[0] = 5;
+        registers[1] = 3;
+        let mut cpu = CPUBuilder::new().registers(registers).build();
+        cpu.sub_xy(0, 1);
+
+        assert_eq!(2, cpu.registers(0));
+        assert_eq!(3, cpu.registers(1));
+        assert_eq!(1, cpu.registers(15));
+    }
+
+    #[test]
+    fn sub_xy_subtracts_registers_underflow() {
+        let mut registers = [0; 16];
+        registers[0] = 0;
+        registers[1] = 1;
+        let mut cpu = CPUBuilder::new().registers(registers).build();
+        cpu.sub_xy(0, 1);
+
+        assert_eq!(255, cpu.registers(0));
+        assert_eq!(0, cpu.registers(15));
+    }
+
+    #[test]
+    fn shift_right_halves_register_and_stores_in_borrow_register() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.registers[3] = 0x011;
+        cpu.registers[5] = 0x0F0;
+
+        cpu.shift_right(3);
+        assert_eq!(cpu.registers[3], 0x008);
+        assert_eq!(cpu.registers[0xF], 1);
+
+        cpu.shift_right(5);
+        assert_eq!(cpu.registers[5], 0x078);
+        assert_eq!(cpu.registers[0xF], 0);
+    }
+
+    #[test]
+    fn shift_left_doubles_register_and_stores_in_borrow_register() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.registers[3] = 0b01111111;
+
+        cpu.shift_left(3);
+        assert_eq!(cpu.registers[3], 0b11111110);
+        assert_eq!(cpu.registers[0xF], 0);
+    }
+
+    #[test]
+    fn subn_subtracts_registers_no_borrow() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.registers[5] = 9;
+        cpu.registers[2] = 10;
+        cpu.sub_n(5, 2);
+
+        assert_eq!(cpu.registers[5], 1);
+        assert_eq!(cpu.registers[0xF], 1);
+    }
+
+    #[test]
+    fn subn_subtracts_registers_with_borrow() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.registers[5] = 1;
+        cpu.registers[2] = 0;
+        cpu.sub_n(5, 2);
+
+        assert_eq!(cpu.registers[5], 255);
+        assert_eq!(cpu.registers[0xF], 0);
     }
 
     #[test]

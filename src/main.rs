@@ -27,5 +27,6 @@ fn main() {
 
     cpu.run();
 
+    assert_eq!(cpu.registers(0), 45);
     println!("5 + (10 * 2) + (10 * 2) = {}", cpu.registers(0));
 }
