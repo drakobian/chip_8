@@ -38,6 +38,8 @@
 //! assert_eq!(15, cpu.registers(0));
 //! ```
 
+use rand::Rng;
+
 type Address = u16;
 type Byte = u8;
 type Memory = [Byte; 4096];
@@ -52,6 +54,7 @@ pub struct CPU {
     memory: Memory,
     stack: Stack,
     stack_pointer: usize,
+    i: Address,
 }
 
 /// Constructs a CPU with defaults, allowing for registers and memory to be
@@ -117,6 +120,7 @@ impl CPUBuilder {
             memory: self.memory.unwrap_or([0; 0x1000]),
             stack: [0; 16],
             stack_pointer: 0,
+            i: 0,
         }
     }
 }
@@ -156,6 +160,10 @@ impl CPU {
                 (0x8, _, _, 0x7) => self.sub_n(x, y),
                 (0x8, _, _, 0xE) => self.shift_left(x),
                 (0x9, _, _, 0) => self.skip_not_equal_reg(x, y),
+                (0xA, _, _, _) => self.set_i(nnn),
+                (0xB, _, _, _) => self.jump_reg(nnn),
+                (0xC, _, _, _) => self.rand(nn),
+                (0xF, _, 0x1, 0xE) => self.set_i_reg(x),
                 _ => todo!("opcode {:04x}", opcode),
             }
         }
@@ -172,6 +180,11 @@ impl CPU {
     /// Moves the program_counter to the given address
     fn jump(&mut self, addr: Address) {
         self.program_counter = addr as usize;
+    }
+
+    /// Moves the program_counter to the given address + registers[0]
+    fn jump_reg(&mut self, addr: Address) {
+        self.program_counter = self.registers[0] as usize + addr as usize;
     }
 
     /// Moves the program_counter to the given address, maintaining
@@ -337,6 +350,22 @@ impl CPU {
         self.registers[x as usize] <<= 1;
     }
 
+    /// Sets the I register
+    fn set_i(&mut self, addr: Address) {
+        self.i = addr;
+    }
+
+    /// Sets the I register from another register
+    fn set_i_reg(&mut self, x: Byte) {
+        self.i += self.registers[x as usize] as u16;
+    }
+
+    /// Sets v0 to some random number (1-255) AND nn
+    fn rand(&mut self, nn: u16) {
+        let mut rng = rand::thread_rng();
+        self.registers[0] = (nn & rng.gen_range(1.0..256.0) as u16) as u8;
+    }
+
     /// A convenience method for retrieving the value of a specific register
     /// # Examples
     /// ```
@@ -443,6 +472,15 @@ mod tests {
         cpu.jump(0x200);
 
         assert_eq!(cpu.program_counter, 0x200);
+    }
+
+    #[test]
+    fn jump_reg_sets_program_counter() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.registers[0] = 0x0FF;
+        cpu.jump_reg(0x100);
+
+        assert_eq!(cpu.program_counter, 0x1FF);
     }
 
     #[test]
@@ -711,5 +749,31 @@ mod tests {
 
         assert_eq!(cpu.stack_pointer, start - 1);
         assert_eq!(cpu.program_counter, pc as usize);
+    }
+
+    #[test]
+    fn set_i_sets_i_register() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.set_i(512);
+
+        assert_eq!(cpu.i, 512);
+    }
+
+    #[test]
+    fn rand_sets_first_register() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.rand(0xFF);
+
+        assert_ne!(cpu.registers[0], 0);
+    }
+
+    #[test]
+    fn set_i_reg_sets_i_from_register() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.registers[4] = 18;
+        cpu.i = 22;
+        cpu.set_i_reg(4);
+
+        assert_eq!(cpu.i, 40);
     }
 }
