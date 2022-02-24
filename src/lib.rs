@@ -164,6 +164,9 @@ impl CPU {
                 (0xB, _, _, _) => self.jump_reg(nnn),
                 (0xC, _, _, _) => self.rand(nn),
                 (0xF, _, 0x1, 0xE) => self.set_i_reg(x),
+                (0xF, _, 0x3, 0x3) => self.bcd(x),
+                (0xF, _, 0x5, 0x5) => self.reg_dump(x),
+                (0xF, _, 0x6, 0x5) => self.reg_load(x),
                 _ => todo!("opcode {:04x}", opcode),
             }
         }
@@ -364,6 +367,31 @@ impl CPU {
     fn rand(&mut self, nn: u16) {
         let mut rng = rand::thread_rng();
         self.registers[0] = (nn & rng.gen_range(1.0..256.0) as u16) as u8;
+    }
+
+    /// Stores from V0 to VX (including VX) in memory, starting at address I
+    fn reg_dump(&mut self, x: Byte) {
+        for ind in 0..=(x as usize) {
+            self.memory[self.i as usize + ind] = self.registers[ind];
+        }
+    }
+
+    /// Fills from V0 to VX (including VX) in memory, starting at address I
+    fn reg_load(&mut self, x: Byte) {
+        for ind in 0..=(x as usize) {
+            self.registers[ind] = self.memory[self.i as usize + ind];
+        }
+    }
+
+    /// Stores the binary-coded decimal representation of VX in memory starting at address I
+    fn bcd(&mut self, x: Byte) {
+        let hundreds = self.registers[x as usize] / 100;
+        let tens = (self.registers[x as usize] / 10) % 10;
+        let ones = self.registers[x as usize] % 10;
+
+        self.memory[self.i as usize + 0] = hundreds as Byte;
+        self.memory[self.i as usize + 1] = tens as Byte;
+        self.memory[self.i as usize + 2] = ones as Byte; 
     }
 
     /// A convenience method for retrieving the value of a specific register
@@ -775,5 +803,82 @@ mod tests {
         cpu.set_i_reg(4);
 
         assert_eq!(cpu.i, 40);
+    }
+
+    #[test]
+    fn reg_dump_sets_memory_from_registers() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.i = 0x100;
+        cpu.registers[0] = 0x80;
+        cpu.registers[1] = 0x14;
+        cpu.registers[2] = 0x77;
+        cpu.registers[3] = 0xEE;
+
+        cpu.reg_dump(2);
+        assert_eq!(cpu.memory[0x100], 0x80);
+        assert_eq!(cpu.memory[0x101], 0x14);
+        assert_eq!(cpu.memory[0x102], 0x77);
+        assert_eq!(cpu.memory[0x103], 0);
+
+        cpu.reg_dump(3);
+        assert_eq!(cpu.memory[0x100], 0x80);
+        assert_eq!(cpu.memory[0x101], 0x14);
+        assert_eq!(cpu.memory[0x102], 0x77);
+        assert_eq!(cpu.memory[0x103], 0xEE);
+    }
+
+    #[test]
+    fn reg_load_sets_registers_from_memory() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.i = 0x100;
+        cpu.memory[0x100] = 0x80;
+        cpu.memory[0x101] = 0x14;
+        cpu.memory[0x102] = 0x77;
+        cpu.memory[0x103] = 0xEE;
+
+        cpu.reg_load(2);
+        assert_eq!(cpu.registers[0], 0x80);
+        assert_eq!(cpu.registers[1], 0x14);
+        assert_eq!(cpu.registers[2], 0x77);
+        assert_eq!(cpu.registers[3], 0);
+
+        cpu.reg_load(3);
+        assert_eq!(cpu.registers[0], 0x80);
+        assert_eq!(cpu.registers[1], 0x14);
+        assert_eq!(cpu.registers[2], 0x77);
+        assert_eq!(cpu.registers[3], 0xEE);
+    }
+
+    #[test]
+    fn bcd_sets_memory_from_binary_coded_register() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.registers[3] = 213;
+        cpu.registers[7] = 176;
+        cpu.registers[11] = 54;
+        cpu.registers[13] = 1;
+
+        cpu.i = 0x100;
+        cpu.bcd(3);
+        assert_eq!(cpu.memory[cpu.i as usize + 0], 2);
+        assert_eq!(cpu.memory[cpu.i as usize + 1], 1);
+        assert_eq!(cpu.memory[cpu.i as usize + 2], 3);
+
+        cpu.i = 0x120;
+        cpu.bcd(7);
+        assert_eq!(cpu.memory[cpu.i as usize + 0], 1);
+        assert_eq!(cpu.memory[cpu.i as usize + 1], 7);
+        assert_eq!(cpu.memory[cpu.i as usize + 2], 6);
+
+        cpu.i = 0x140;
+        cpu.bcd(11);
+        assert_eq!(cpu.memory[cpu.i as usize + 0], 0);
+        assert_eq!(cpu.memory[cpu.i as usize + 1], 5);
+        assert_eq!(cpu.memory[cpu.i as usize + 2], 4);
+
+        cpu.i = 0x160;
+        cpu.bcd(13);
+        assert_eq!(cpu.memory[cpu.i as usize + 0], 0);
+        assert_eq!(cpu.memory[cpu.i as usize + 1], 0);
+        assert_eq!(cpu.memory[cpu.i as usize + 2], 1);
     }
 }

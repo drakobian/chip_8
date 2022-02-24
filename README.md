@@ -7,6 +7,7 @@
 	Write unit test(s) first!
 	No, write docs first!!!
 	The address register, I? what's going on with that one
+-- Done with all the isolated commands!!! yas
 5. tackle display
 	might be able to run some roms at this point??? :)))) (or maybe not until timers...)
 6. timers
