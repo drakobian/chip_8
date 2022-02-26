@@ -1,4 +1,7 @@
+mod display;
+
 use chip_8::CPUBuilder;
+use crate::display::Game;
 
 fn main() {
     let mut memory = [0; 0x1000];
@@ -17,9 +20,12 @@ fn main() {
     memory[0x103] = 0x81;
     memory[0x104] = 0x81;
 
-    let mut cpu = CPUBuilder::new().memory(memory).build();
+    let cpu = CPUBuilder::new().memory(memory).build();
 
-    cpu.run();
+    //cpu.run();
+    let mut game = Game::new(cpu);
+    game.run();
+    //Game::run(cpu);
 }
 /*fn main() {
     let mut registers = [0; 16];

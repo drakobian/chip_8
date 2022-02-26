@@ -128,8 +128,8 @@ impl CPUBuilder {
 impl CPU {
     // TODO: add some simple doc examples for doctests
     /// Runs the program set in memory according to the CHIP-8 spec
-    pub fn run(&mut self) {
-        loop {
+    pub fn run(&mut self, screen: &mut Vec<Vec<usize>>) -> Option<()> {
+        //loop {
             let opcode = self.read_opcode();
             self.program_counter += 2;
 
@@ -141,7 +141,7 @@ impl CPU {
             let nn = opcode & 0x00FF;
 
             match (c, x, y, d) {
-                (0, 0, 0, 0) => break,
+                (0, 0, 0, 0) => return None,
                 (0, 0, 0xE, 0xE) => self.ret(),
                 (0x1, _, _, _) => self.jump(nnn),
                 (0x2, _, _, _) => self.call(nnn),
@@ -167,15 +167,16 @@ impl CPU {
                 (0xF, _, 0x3, 0x3) => self.bcd(x),
                 (0xF, _, 0x5, 0x5) => self.reg_dump(x),
                 (0xF, _, 0x6, 0x5) => self.reg_load(x),
-                (0xD, _, _, _) => self.draw(x, y, d),
+                (0xD, _, _, _) => self.draw(x, y, d, screen),
                 _ => todo!("opcode {:04x}", opcode),
-            }
-        }
+            };
+        Some(())
+        //}
     }
 
     /// Draws a sprite at coordinate (VX, VY) that 
     /// has a width of 8 pixels and a height of d pixels.
-    fn draw(&mut self, x: Byte, y: Byte, d: Byte) {
+    fn draw(&mut self, x: Byte, y: Byte, d: Byte, screen: &mut Vec<Vec<usize>>) {
         let bits = self.get_display_bits(d);
         //println!("{:?}", bits);
         for bit in bits {
