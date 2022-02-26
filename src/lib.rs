@@ -167,9 +167,43 @@ impl CPU {
                 (0xF, _, 0x3, 0x3) => self.bcd(x),
                 (0xF, _, 0x5, 0x5) => self.reg_dump(x),
                 (0xF, _, 0x6, 0x5) => self.reg_load(x),
+                (0xD, _, _, _) => self.draw(x, y, d),
                 _ => todo!("opcode {:04x}", opcode),
             }
         }
+    }
+
+    /// Draws a sprite at coordinate (VX, VY) that 
+    /// has a width of 8 pixels and a height of d pixels.
+    fn draw(&mut self, x: Byte, y: Byte, d: Byte) {
+        let bits = self.get_display_bits(d);
+        //println!("{:?}", bits);
+        for bit in bits {
+            //println!("{}", bit);
+            for char in bit.chars() {
+                if char == '1' {
+                    print!("*");
+                } else {
+                    print!(".");
+                }
+            }
+            println!("");
+        }
+    }
+
+    /// Gets the bytes required for `draw` and returns as bit strings
+    // Todo: make this more rusty! (will Clippy help?)
+    // Pretty sure could do this in a more functional/iterator style
+    fn get_display_bits(&self, d: Byte) -> Vec<String> {
+        let mut bits = vec![];
+
+        for i in 0..(d as usize) {
+            let byte = self.memory[self.i as usize + i];
+
+            bits.push(format!("{:b}", byte));
+        }
+
+        bits
     }
 
     /// Returns the next two bytes of memory concatenated as a u16
@@ -881,4 +915,26 @@ mod tests {
         assert_eq!(cpu.memory[cpu.i as usize + 1], 0);
         assert_eq!(cpu.memory[cpu.i as usize + 2], 1);
     }
+
+    #[test]
+    fn get_display_bits_reads_from_memory_as_bits() {
+        let mut cpu = CPUBuilder::new().build();
+        cpu.i = 0x100;
+        cpu.memory[0x100] = 0xFF;
+        cpu.memory[0x101] = 0x81;
+        cpu.memory[0x102] = 0xFF;
+        cpu.memory[0x103] = 0x81;
+        cpu.memory[0x104] = 0x81;
+        let bits = cpu.get_display_bits(5);
+
+        assert_eq!(bits, vec![
+            String::from("11111111"),
+            String::from("10000001"),
+            String::from("11111111"),
+            String::from("10000001"),
+            String::from("10000001"),
+        ]);
+    }
+
+    // Todo: maybe find a way to unit test display opcodes
 }
