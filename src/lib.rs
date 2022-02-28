@@ -128,7 +128,7 @@ impl CPUBuilder {
 impl CPU {
     // TODO: add some simple doc examples for doctests
     /// Runs the program set in memory according to the CHIP-8 spec
-    pub fn run(&mut self, screen: &mut Vec<Vec<usize>>) -> Option<()> {
+    pub fn run(&mut self, screen: &mut [[bool; 64]; 32]) -> Option<()> {
         //loop {
             let opcode = self.read_opcode();
             self.program_counter += 2;
@@ -176,19 +176,31 @@ impl CPU {
 
     /// Draws a sprite at coordinate (VX, VY) that 
     /// has a width of 8 pixels and a height of d pixels.
-    fn draw(&mut self, x: Byte, y: Byte, d: Byte, screen: &mut Vec<Vec<usize>>) {
+    // todo: XOR bits onto screen
+    // todo: implement flipping VF when necessary
+    // todo: implement wrapping for indices outside of screen
+    fn draw(&mut self, x: Byte, y: Byte, d: Byte, screen: &mut [[bool; 64]; 32]) {
         let bits = self.get_display_bits(d);
-        //println!("{:?}", bits);
-        for bit in bits {
-            //println!("{}", bit);
-            for char in bit.chars() {
+        let x_coord = self.registers[x as usize] as usize;
+        let y_coord = self.registers[y as usize] as usize;
+
+        // we have a vec of byte strings to write, and we know the coordinate
+        // (vx, vy) to start at.
+
+        // so for each byte string in bits
+            // and for each character in each byte string
+                // update screen accordingly..
+        // byte_string_ind indicates which row we're on
+        for (byte_string_ind, byte_string) in bits.iter().enumerate() {
+            // and char_ind indicates column
+            for (char_ind, char) in byte_string.chars().enumerate() {
+                
                 if char == '1' {
-                    print!("*");
+                    screen[y_coord + byte_string_ind][x_coord + char_ind] = true;
                 } else {
-                    print!(".");
+                    screen[y_coord + byte_string_ind][x_coord + char_ind] = false;
                 }
             }
-            println!("");
         }
     }
 

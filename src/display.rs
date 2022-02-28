@@ -13,37 +13,40 @@ use chip_8::CPU;
 
 pub struct App {
     gl: GlGraphics,
-    rotation: f64,
-    //screen: Vec<Vec<usize>>,
 }
 
 impl App {
-    fn render(&mut self, args: &RenderArgs, screen: &Vec<Vec<usize>>) {
+    fn render(&mut self, args: &RenderArgs, screen: &[[bool; 64]; 32]) {
         use graphics::*;
 
         const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
         const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
-        let square = rectangle::square(0.0, 0.0, 25.0);
-        //let rotation = self.rotation;
-        //let (x, y) = (args.window_size[0] / 2.0, args.window_size[1] / 2.0);
-        //let (x, y) = (10, 10);
+        let mut squares: Vec<types::Rectangle> = vec![];
+        //squares.push(rectangle::square(5.0, 5.0, 25.0));
+        //squares.push(rectangle::square(50.0, 50.0, 25.0));
+        //squares.push(rectangle::square(150.0, 155.0, 25.0));
+        for (row_ind, row) in screen.iter().enumerate() {
+            for (col_ind, col) in row.iter().enumerate() {
+                if *col {
+                    //println!("{}", col_ind);
+                    //println!("{}", row_ind);
+                    let square = rectangle::square((col_ind*10 + 5) as f64, (row_ind*10 + 5) as f64, 10.0);
+                    squares.push(square);
+                }
+            }
+        }
 
         self.gl.draw(args.viewport(), |c, gl| {
             clear(BLACK, gl);
 
-            let transform = c.transform;
-                //.trans(x, y)
-                //.rot_rad(rotation)
-                //.trans(-25.0, -25.0);
-
-            rectangle(GREEN, square, transform, gl);
+            for square in squares {
+                let transform = c.transform;
+                rectangle(GREEN, square, transform, gl);
+            }
         });
     }
 
-    fn update(&mut self, args: &UpdateArgs) {
-        //self.rotation += 2.0 * args.dt;
-    }
 }
 
 pub struct Game {
@@ -64,19 +67,10 @@ impl Game {
             .build()
             .unwrap();
 
-        let mut screen = vec![];
-        for _ in 0..32 {
-            let mut row = vec![];
-            for _ in 0..64 {
-                row.push(0);
-            }
-            screen.push(row);
-        }
+        let mut screen = [[false; 64]; 32];
 
         let mut app = App {
             gl: GlGraphics::new(opengl),
-            rotation: 0.0,
-            //screen,
         };
 
         let mut events = Events::new(EventSettings::new());
@@ -84,14 +78,11 @@ impl Game {
             if let None = self.cpu.run(&mut screen) {
                 break
             }
-
+            
             if let Some(args) = e.render_args() {
                 app.render(&args, &screen);
             }
-
-            if let Some(args) = e.update_args() {
-                app.update(&args);
-            }
+            
         }
     }
 }
