@@ -174,11 +174,14 @@ impl CPU {
         //}
     }
 
-    /// Draws a sprite at coordinate (VX, VY) that 
-    /// has a width of 8 pixels and a height of d pixels.
-    // todo: XOR bits onto screen
-    // todo: implement flipping VF when necessary
-    // todo: implement wrapping for indices outside of screen
+    /// Draws a sprite at coordinate (VX, VY) that has a width 
+    /// of 8 pixels and a height of N pixels. Each row of 8 pixels 
+    /// is read as bit-coded starting from memory location I; I value 
+    /// does not change after the execution of this instruction. As 
+    /// described above, VF is set to 1 if any screen pixels are flipped 
+    /// from set to unset when the sprite is drawn, and to 0 if that does not happen
+
+    // todo: implement wrapping for indices outside of screen (? not sure if needed)
     fn draw(&mut self, x: Byte, y: Byte, d: Byte, screen: &mut [[bool; 64]; 32]) {
         let bits = self.get_display_bits(d);
         let x_coord = self.registers[x as usize] as usize;
@@ -191,16 +194,29 @@ impl CPU {
             // and for each character in each byte string
                 // update screen accordingly..
         // byte_string_ind indicates which row we're on
+        let mut flip_vf = false;
         for (byte_string_ind, byte_string) in bits.iter().enumerate() {
             // and char_ind indicates column
             for (char_ind, char) in byte_string.chars().enumerate() {
-                
+                let previous = screen[y_coord + byte_string_ind][x_coord + char_ind]; 
+
                 if char == '1' {
-                    screen[y_coord + byte_string_ind][x_coord + char_ind] = true;
+                    screen[y_coord + byte_string_ind][x_coord + char_ind] ^= true;
                 } else {
-                    screen[y_coord + byte_string_ind][x_coord + char_ind] = false;
+                    screen[y_coord + byte_string_ind][x_coord + char_ind] ^= false;
+                }
+
+                // if a bit was set before, and just got unset, need to flip vf at end
+                if previous && !screen[y_coord + byte_string_ind][x_coord + char_ind] {
+                    flip_vf = true;
                 }
             }
+        }
+
+        if flip_vf {
+            self.registers[0xF] = 1;
+        } else {
+            self.registers[0xF] = 0;
         }
     }
 

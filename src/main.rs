@@ -66,9 +66,9 @@ fn main() {
     memory[0x01C] = 0x60;
     memory[0x01D] = 0x00;
     
-    // jump back to beginning
+    // jump to this instruction (loop forevs)
     memory[0x01E] = 0x10;
-    memory[0x01F] = 0x00;
+    memory[0x01F] = 0x1E;
 
     // D
     memory[0x100] = 0xFC; // 11111100

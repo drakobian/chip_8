@@ -31,7 +31,7 @@ impl App {
                 if *col {
                     //println!("{}", col_ind);
                     //println!("{}", row_ind);
-                    let square = rectangle::square((col_ind*10 + 5) as f64, (row_ind*10 + 5) as f64, 10.0);
+                    let square = rectangle::square((col_ind*6 + 2) as f64, (row_ind*6 + 2) as f64, 5.0);
                     squares.push(square);
                 }
             }
