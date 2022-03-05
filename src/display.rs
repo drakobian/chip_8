@@ -6,7 +6,7 @@ extern crate piston;
 use glutin_window::GlutinWindow as Window;
 use opengl_graphics::{GlGraphics, OpenGL};
 use piston::event_loop::{EventSettings, Events};
-use piston::input::{RenderArgs, RenderEvent, UpdateArgs, UpdateEvent};
+use piston::input::{RenderArgs, RenderEvent};
 use piston::window::WindowSettings;
 
 use chip_8::CPU;
@@ -23,15 +23,11 @@ impl App {
         const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
         let mut squares: Vec<types::Rectangle> = vec![];
-        //squares.push(rectangle::square(5.0, 5.0, 25.0));
-        //squares.push(rectangle::square(50.0, 50.0, 25.0));
-        //squares.push(rectangle::square(150.0, 155.0, 25.0));
+
         for (row_ind, row) in screen.iter().enumerate() {
             for (col_ind, col) in row.iter().enumerate() {
                 if *col {
-                    //println!("{}", col_ind);
-                    //println!("{}", row_ind);
-                    let square = rectangle::square((col_ind*6 + 2) as f64, (row_ind*6 + 2) as f64, 5.0);
+                    let square = rectangle::square((col_ind*12 + 4) as f64, (row_ind*12 + 4) as f64, 10.0);
                     squares.push(square);
                 }
             }

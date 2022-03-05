@@ -119,7 +119,7 @@ impl CPUBuilder {
         let memory = self.get_memory();
 
         CPU {
-            program_counter: 200,
+            program_counter: 0x200,
             registers: self.registers.unwrap_or([0; 16]),
             memory,
             stack: [0; 16],
@@ -232,8 +232,8 @@ impl CPUBuilder {
         // some interpreter memory is open :)
 
         // populate rest of memory if any memory was passed in
-        for i in 200..4096 {
-            memory[i] = self.memory.unwrap_or([0; 4096])[i - 200];
+        for i in 0x200..0x1000 {
+            memory[i] = self.memory.unwrap_or([0; 0x1000])[i - 0x200];
         }
 
         memory
@@ -244,49 +244,57 @@ impl CPU {
     // TODO: add some simple doc examples for doctests
     /// Runs the program set in memory according to the CHIP-8 spec
     pub fn run(&mut self, screen: &mut [[bool; 64]; 32]) -> Option<()> {
-        //loop {
-            let opcode = self.read_opcode();
-            self.program_counter += 2;
+        let opcode = self.read_opcode();
+        self.program_counter += 2;
 
-            let c = ((opcode & 0xF000) >> 12) as Byte;
-            let x = ((opcode & 0x0F00) >> 08) as Byte;
-            let y = ((opcode & 0x00F0) >> 04) as Byte;
-            let d = ((opcode & 0x000F) >> 00) as Byte;
-            let nnn = opcode & 0x0FFF;
-            let nn = opcode & 0x00FF;
+        let c = ((opcode & 0xF000) >> 12) as Byte;
+        let x = ((opcode & 0x0F00) >> 08) as Byte;
+        let y = ((opcode & 0x00F0) >> 04) as Byte;
+        let d = ((opcode & 0x000F) >> 00) as Byte;
+        let nnn = opcode & 0x0FFF;
+        let nn = opcode & 0x00FF;
 
-            match (c, x, y, d) {
-                (0, 0, 0, 0) => return None,
-                (0, 0, 0xE, 0xE) => self.ret(),
-                (0x1, _, _, _) => self.jump(nnn),
-                (0x2, _, _, _) => self.call(nnn),
-                (0x3, _, _, _) => self.skip_equal(x, nn),
-                (0x4, _, _, _) => self.skip_not_equal(x, nn),
-                (0x5, _, _, _) => self.skip_equal_reg(x, y),
-                (0x6, _, _, _) => self.set_register(x, nn),
-                (0x7, _, _, _) => self.add(x, nn),
-                (0x8, _, _, 0) => self.assign(x, y),
-                (0x8, _, _, 0x1) => self.or(x, y),
-                (0x8, _, _, 0x2) => self.and(x, y),
-                (0x8, _, _, 0x3) => self.xor(x, y),
-                (0x8, _, _, 0x4) => self.add_xy(x, y),
-                (0x8, _, _, 0x5) => self.sub_xy(x, y),
-                (0x8, _, _, 0x6) => self.shift_right(x),
-                (0x8, _, _, 0x7) => self.sub_n(x, y),
-                (0x8, _, _, 0xE) => self.shift_left(x),
-                (0x9, _, _, 0) => self.skip_not_equal_reg(x, y),
-                (0xA, _, _, _) => self.set_i(nnn),
-                (0xB, _, _, _) => self.jump_reg(nnn),
-                (0xC, _, _, _) => self.rand(nn),
-                (0xF, _, 0x1, 0xE) => self.set_i_reg(x),
-                (0xF, _, 0x3, 0x3) => self.bcd(x),
-                (0xF, _, 0x5, 0x5) => self.reg_dump(x),
-                (0xF, _, 0x6, 0x5) => self.reg_load(x),
-                (0xD, _, _, _) => self.draw(x, y, d, screen),
-                _ => todo!("opcode {:04x}", opcode),
-            };
+        match (c, x, y, d) {
+            (0, 0, 0, 0) => return None,
+            (0, 0, 0xE, 0) => println!("implement clear :)"),
+            (0, 0, 0xE, 0xE) => self.ret(),
+            (0, _, _, _) => self.call(nnn), // todo: is this right?
+            (0x1, _, _, _) => self.jump(nnn),
+            (0x2, _, _, _) => self.call(nnn),
+            (0x3, _, _, _) => self.skip_equal(x, nn),
+            (0x4, _, _, _) => self.skip_not_equal(x, nn),
+            (0x5, _, _, _) => self.skip_equal_reg(x, y),
+            (0x6, _, _, _) => self.set_register(x, nn),
+            (0x7, _, _, _) => self.add(x, nn),
+            (0x8, _, _, 0) => self.assign(x, y),
+            (0x8, _, _, 0x1) => self.or(x, y),
+            (0x8, _, _, 0x2) => self.and(x, y),
+            (0x8, _, _, 0x3) => self.xor(x, y),
+            (0x8, _, _, 0x4) => self.add_xy(x, y),
+            (0x8, _, _, 0x5) => self.sub_xy(x, y),
+            (0x8, _, _, 0x6) => self.shift_right(x),
+            (0x8, _, _, 0x7) => self.sub_n(x, y),
+            (0x8, _, _, 0xE) => self.shift_left(x),
+            (0x9, _, _, 0) => self.skip_not_equal_reg(x, y),
+            (0xA, _, _, _) => self.set_i(nnn),
+            (0xB, _, _, _) => self.jump_reg(nnn),
+            (0xC, _, _, _) => self.rand(nn),
+            (0xE, _, 0x9, 0xE) => println!("implement key= :)"),
+            (0xE, _, 0xA, 0x1) => println!("implement key!= :)"),
+            (0xF, _, 0x0, 0x7) => println!("implement get delay :)"),
+            (0xF, _, 0x0, 0xA) => println!("implement get key :)"),
+            (0xF, _, 0x1, 0x5) => println!("implement delay timer :)"),
+            (0xF, _, 0x1, 0x8) => println!("implement sound timer :)"),
+            (0xF, _, 0x1, 0xE) => self.set_i_reg(x),
+            (0xF, _, 0x2, 0x9) => println!("implement set i sprite :)"),
+            (0xF, _, 0x3, 0x3) => self.bcd(x),
+            (0xF, _, 0x5, 0x5) => self.reg_dump(x),
+            (0xF, _, 0x6, 0x5) => self.reg_load(x),
+            (0xD, _, _, _) => self.draw(x, y, d, screen),
+            _ => todo!("opcode {:04x}", opcode),
+        };
+        
         Some(())
-        //}
     }
 
     /// Draws a sprite at coordinate (VX, VY) that has a width 
@@ -313,16 +321,18 @@ impl CPU {
         for (byte_string_ind, byte_string) in bits.iter().enumerate() {
             // and char_ind indicates column
             for (char_ind, char) in byte_string.chars().enumerate() {
-                let previous = screen[y_coord + byte_string_ind][x_coord + char_ind]; 
+                let y = (y_coord + byte_string_ind) % 32;
+                let x = (x_coord + char_ind) % 64;
+                let previous = screen[y][x]; 
 
                 if char == '1' {
-                    screen[y_coord + byte_string_ind][x_coord + char_ind] ^= true;
+                    screen[y][x] ^= true;
                 } else {
-                    screen[y_coord + byte_string_ind][x_coord + char_ind] ^= false;
+                    screen[y][x] ^= false;
                 }
 
                 // if a bit was set before, and just got unset, need to flip vf at end
-                if previous && !screen[y_coord + byte_string_ind][x_coord + char_ind] {
+                if previous && !screen[y][x] {
                     flip_vf = true;
                 }
             }
@@ -364,6 +374,7 @@ impl CPU {
 
     /// Moves the program_counter to the given address + registers[0]
     fn jump_reg(&mut self, addr: Address) {
+        // todo: handle overflow????
         self.program_counter = self.registers[0] as usize + addr as usize;
     }
 
@@ -489,7 +500,9 @@ impl CPU {
     /// Adds nn to register[x]
     fn add(&mut self, x: Byte, nn: u16) {
         // TODO: handle overflow?
-        self.registers[x as usize] += nn as u8;
+        //self.registers[x as usize].overflowing_add(nn as u8);
+        let (val, _overflow) = self.registers[x as usize].overflowing_add(nn as u8);
+        self.registers[x as usize] = val;
     }
 
     /// Sets register[x] to the value in register[y]
